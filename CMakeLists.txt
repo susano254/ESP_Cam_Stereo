@@ -16,5 +16,5 @@ include_directories(${OpenCV_INCLUDE_DIRS})
 
 find_package(Pangolin REQUIRED)
 
-add_executable(ESP_StereoVision ESP_StereoVision.cpp)
+add_executable(ESP_StereoVision ESP_StereoVision.cpp Stereo_Glasses.cpp)
 target_link_libraries(ESP_StereoVision ${OpenCV_LIBS} ${Pangolin_LIBRARIES})
