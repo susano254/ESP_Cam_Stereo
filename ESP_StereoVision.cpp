@@ -4,10 +4,24 @@
 #include <Eigen/Core>
 #include <pangolin/pangolin.h>
 #include <unistd.h>
+#include <thread>
 
 using namespace std;
 using namespace Eigen;
 using namespace cv;
+
+bool terminateThreads = false;
+
+void captureFrames(VideoCapture& capture, Mat& frame, const string cam) {
+    while (!terminateThreads) {
+        if (!capture.read(frame)) {
+            cout << cam + " Stream Stopped" << endl;
+            waitKey();
+            break;
+        }
+		cout << "captured: " << cam << " frame successfully" << endl;
+    }
+}
 
 int main(){
 	VideoCapture videoCaptureLeft, videoCaptureRight;
@@ -31,20 +45,28 @@ int main(){
 		return -1;
 	}
 
+
+
+	thread leftThread(captureFrames, ref(videoCaptureLeft), ref(frameLeft), "Left");
+	thread rightThread(captureFrames, ref(videoCaptureRight), ref(frameRight), "Right");
+
 	while(true){
-		if(!videoCaptureLeft.read(frameLeft)){
-			cout << "left Stream Stopped" << endl;
-			waitKey();
-		}
-		if(!videoCaptureRight.read(frameRight)){
-			cout << "Right Stream Stopped" << endl;
-			waitKey();
+		if(!frameLeft.empty() && !frameRight.empty()){
+			hconcat(frameLeft, frameRight, frame);
+			imshow("Stereo Stream", frame);
 		}
 
-		hconcat(frameLeft, frameRight, frame);
-		imshow("Stereo Stream", frame);
+        if(cv::waitKey(1) >= 0){
+			terminateThreads = true;
 
-        if(cv::waitKey(1) >= 0) break;
+			leftThread.join();
+			rightThread.join();
+
+			break;
+		} 
 	}
+
+
+	return 0;
 
 }
