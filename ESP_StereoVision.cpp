@@ -12,6 +12,7 @@ using namespace std;
 int main(){
 	Stereo_Glasses glasses;
 
+	glasses.calibrate();
 	glasses.run();
 	return 0;
 

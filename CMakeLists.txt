@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.5)
 
 set(CMAKE_BUILD_TYPE "Debug")
 # Add c++11 standard support
-set(CMAKE_CXX_FLAGS "-std=c++11 -O2")
 set(CMAKE_CXX_STANDARD 11)
 
 
