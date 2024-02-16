@@ -12,8 +12,12 @@ using namespace std;
 int main(){
 	Stereo_Glasses glasses;
 
-	glasses.calibrate();
+	// glasses.calibrate();
+	// glasses.stereoCalibrate();
 	glasses.run();
-	return 0;
+	// glasses.runOne();
 
+
+
+	return 0;
 }

@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
+project(ESP_Stereo_OpenCV)
 
 set(CMAKE_BUILD_TYPE "Debug")
 # Add c++11 standard support
