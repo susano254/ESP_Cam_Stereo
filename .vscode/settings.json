@@ -1,0 +1,10 @@
+{
+	"files.associations": {
+		"*.asm": "nasm",
+		"*.s": "arm",
+		"*.tcc": "cpp",
+		"fstream": "cpp",
+		"locale": "cpp",
+		"string": "cpp"
+	}
+}
