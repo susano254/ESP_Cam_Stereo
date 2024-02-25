@@ -449,11 +449,6 @@ void Stereo_Glasses::stereoCalibrate() {
     cv::cvtColor(rectFrameL, rectFrameL, cv::COLOR_BGR2GRAY);
     cv::cvtColor(rectFrameR, rectFrameR, cv::COLOR_BGR2GRAY);
 
-	int k = 5;
-	Size kernel = Size(k, k);
-	GaussianBlur(rectFrameL, rectFrameL, kernel, 0);
-	GaussianBlur(rectFrameR, rectFrameR, kernel, 0);
-
 	// imwrite(savePath + "rectFrameL", rectFrameL);
 	// imwrite(savePath + "rectFrameR", rectFrameR);
 
@@ -462,79 +457,105 @@ void Stereo_Glasses::stereoCalibrate() {
 	waitKey(0);
 }
 
+void onTrackbar(int, void* userdata) {
+    Stereo_Glasses* stereoGlasses = static_cast<Stereo_Glasses*>(userdata);
+
+	// Ensure blockSize is always odd and does not exceed 255
+    stereoGlasses->blockSize = (stereoGlasses->blockSize % 2 == 0) ? stereoGlasses->blockSize + 1 : stereoGlasses->blockSize;
+    stereoGlasses->blockSize = std::min(stereoGlasses->blockSize, 255);
+    stereoGlasses->blockSize = std::max(5, stereoGlasses->blockSize);
+
+
+    stereoGlasses->updateDisparity();
+}
+
+
+void Stereo_Glasses::updateDisparity() {
+	P1 = 8*9*blockSize*blockSize; //*blockSize;
+	P2 = 32*9*blockSize*blockSize; //*blockSize;
+	numDisparities = 16*disparityFactor - minDisparity;
+
+    leftMatcher->setBlockSize(blockSize);
+    leftMatcher->setNumDisparities(numDisparities);
+
+	rightMatcher->setBlockSize(blockSize);
+    rightMatcher->setNumDisparities(numDisparities);
+
+    leftMatcher->compute(rectified_left, rectified_right, left_disp);
+    rightMatcher->compute(rectified_right, rectified_left, right_disp);
+
+    wlsFilter->setLambda(5000.0);
+    wlsFilter->setSigmaColor(1.5);
+
+    normalize(left_disp, left_disp, 0, 255, cv::NORM_MINMAX, CV_8U);
+    normalize(right_disp, right_disp, 0, 255, cv::NORM_MINMAX, CV_8U);
+
+    wlsFilter->filter(left_disp, rectified_left, filteredDisparity, right_disp, Rect(), rectified_right);
+    cv::applyColorMap(filteredDisparity, coloredDisparity, cv::COLORMAP_JET);
+}
+
+
 void Stereo_Glasses::getDepthMap(Mat left, Mat right) {
-	int blockSize = 9;
-	int P1 = 8*9*blockSize*blockSize; //*blockSize;
-	int P2 = 32*9*blockSize*blockSize; //*blockSize;
-	int minDisparity = 0;
-	int disparityFactor = 9;
-	int numDisparities = 16*disparityFactor - minDisparity;
-    Mat left_disp, right_disp, disparity, filteredDisparity, coloredDisparity;
+	left.copyTo(rectified_left);
+	right.copyTo(rectified_right);
 
-
-	int k = 21;
 	Size kernel = Size(k, k);
 	GaussianBlur(left, left, kernel, 0);
 	GaussianBlur(right, right, kernel, 0);
 
-    // Ptr<StereoSGBM> leftMatcher = StereoSGBM::create(
-	// 	minDisparity, 
-	// 	numDisparities, 
-	// 	blockSize, 
-	// 	P1, 
-	// 	P2, 
-	// 	1,
-	// 	 63, 
-	// 	 10, 
-	// 	 0, 
-	// 	 32,
-	// 	 StereoSGBM::MODE_SGBM
-	// );	//magic parameters
 
-    // cv::Ptr<cv::StereoSGBM> leftMatcher = cv::StereoSGBM::create(numDisparities, blockSize);
-    cv::Ptr<cv::StereoBM> leftMatcher = cv::StereoBM::create(numDisparities, blockSize);
-	leftMatcher->setMinDisparity(minDisparity);
-	leftMatcher->setNumDisparities(numDisparities);
-	leftMatcher->setDisp12MaxDiff(1);
-	leftMatcher->setPreFilterCap(63);
-	leftMatcher->setUniquenessRatio(0);
-	leftMatcher->setSpeckleWindowSize(0);
-	leftMatcher->setSpeckleRange(32);
+	cv::namedWindow("Parameter Tuning", cv::WINDOW_NORMAL);
+
+    cv::createTrackbar("BlockSize", "Parameter Tuning", &blockSize, 255, onTrackbar, this);
+    cv::createTrackbar("disparityFactor", "Parameter Tuning", &disparityFactor, 255, onTrackbar, this);
 
 
-	Ptr<StereoMatcher> rightMatcher = ximgproc::createRightMatcher(leftMatcher);
-	rightMatcher->setMinDisparity(minDisparity);
-	rightMatcher->setNumDisparities(numDisparities);
-	rightMatcher->setDisp12MaxDiff(1);
-	// rightMatcher->setPreFiwilterCap(63);
-	// rightMatcher->setUniquenessRatio(10);
-	rightMatcher->setSpeckleWindowSize(9);
-	rightMatcher->setSpeckleRange(32);
+	while (true) {
+        updateDisparity();
 
-	leftMatcher->compute(left, right, left_disp);
-	rightMatcher->compute(left, right, right_disp);
+		hconcat(left_disp, right_disp, disparity);
+        cv::imshow("disparity", disparity);
+        cv::imshow("filtered disparity", filteredDisparity);
+        cv::imshow("Colored Disparity", coloredDisparity);
+        cv::imshow("confidence map", wlsFilter->getConfidenceMap());
 
-	Ptr<ximgproc::DisparityWLSFilter> wlsFilter = ximgproc::createDisparityWLSFilter(leftMatcher);
-	// wlsFilter->setLambda(5000.0);
-	// wlsFilter->setSigmaColor(1.5);
+        int key = cv::waitKey(1);
+        if (key == 27)  // Escape key to exit
+            break;
+    }
 
 
+	// normalize(left_disp , left_disp, 0, 255, NORM_MINMAX, CV_8U);
+	// normalize(right_disp , right_disp, 0, 255, NORM_MINMAX, CV_8U);
 
 
-	normalize(left_disp , left_disp, 0, 255, NORM_MINMAX, CV_8U);
-	normalize(right_disp , right_disp, 0, 255, NORM_MINMAX, CV_8U);
+	// wlsFilter->filter(left_disp, left ,filteredDisparity, right_disp, Rect(), right);
+	// hconcat(left_disp, right_disp, disparity);
+	// cv::applyColorMap(filteredDisparity, coloredDisparity, cv::COLORMAP_JET);
 
-
-	wlsFilter->filter(left_disp, left ,filteredDisparity, right_disp, Rect(), right);
-	hconcat(left_disp, right_disp, disparity);
-	cv::applyColorMap(filteredDisparity, coloredDisparity, cv::COLORMAP_JET);
-
-	cv::imshow("disparity", disparity);
-	cv::imshow("filtered disparity", filteredDisparity);
-	// cv::imshow("Colored Disparity", coloredDisparity);
-	cv::imshow("confidence map", wlsFilter->getConfidenceMap());
-    // showPointCloud(pointcloud);
+	// cv::imshow("disparity", disparity);
+	// cv::imshow("filtered disparity", filteredDisparity);
+	// // cv::imshow("Colored Disparity", coloredDisparity);
+	// cv::imshow("confidence map", wlsFilter->getConfidenceMap());
+    // // showPointCloud(pointcloud);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 void Stereo_Glasses::showPointCloud(const vector<Vector4d, Eigen::aligned_allocator<Vector4d>> &pointcloud) {
     // //draw point cloud
