@@ -8,9 +8,6 @@ void Stereo_Glasses::init(){
 	// Use the rotation matrixes for stereo rectification and camera intrinsics for undistorting the image
 	// Compute the rectification map (mapping between the original image pixels and 
 	// their transformed values after applying rectification and undistortion) for left and right camera frames
-	Mat Left_Stereo_Map1, Left_Stereo_Map2;
-	Mat Right_Stereo_Map1, Right_Stereo_Map2;
-
 	float new_mtxL_arr[] = {
 		601.4346923828125, 0, 309.1313368132032,
 		0, 603.6869506835938, 253.085649887249,
@@ -73,6 +70,7 @@ void Stereo_Glasses::init(){
 	cv::remap(grayL, rectFrameL, Left_Stereo_Map1, Left_Stereo_Map2, INTER_LINEAR);
 	cv::remap(grayR, rectFrameR, Right_Stereo_Map1, Right_Stereo_Map2, INTER_LINEAR);
 
+
 	Mat tempFrame1, tempFrame2;
 
     // Draw the lines on the second image
@@ -111,10 +109,13 @@ void Stereo_Glasses::init(){
 
     cv::cvtColor(rectFrameL, rectFrameL, cv::COLOR_BGR2GRAY);
     cv::cvtColor(rectFrameR, rectFrameR, cv::COLOR_BGR2GRAY);
+	destroyAllWindows();
 
+	rectFrameL.copyTo(rectified_left);
+	rectFrameR.copyTo(rectified_right);
 
-	getDepthMap(rectFrameL, rectFrameR);
-	waitKey(0);
+	// tuneDepthMap(rectified_left, rectified_right);
+	// waitKey(0);
 }
 
 
@@ -238,7 +239,6 @@ void Stereo_Glasses::captureFrames(Stereo_Glasses *instance, VideoCapture& captu
 		}
 	}
 }
-
 
 
 void Stereo_Glasses::stereoCalibrate() {
@@ -453,7 +453,7 @@ void Stereo_Glasses::stereoCalibrate() {
 	// imwrite(savePath + "rectFrameR", rectFrameR);
 
 
-	getDepthMap(rectFrameL, rectFrameR);
+	tuneDepthMap(rectFrameL, rectFrameR);
 	waitKey(0);
 }
 
@@ -482,28 +482,26 @@ void Stereo_Glasses::updateDisparity() {
     rightMatcher->setNumDisparities(numDisparities);
 
     leftMatcher->compute(rectified_left, rectified_right, left_disp);
-    rightMatcher->compute(rectified_right, rectified_left, right_disp);
+    rightMatcher->compute(rectified_left, rectified_right, right_disp);
+    // rightMatcher->compute(rectified_right, rectified_left, right_disp);
 
     wlsFilter->setLambda(5000.0);
     wlsFilter->setSigmaColor(1.5);
 
-    normalize(left_disp, left_disp, 0, 255, cv::NORM_MINMAX, CV_8U);
-    normalize(right_disp, right_disp, 0, 255, cv::NORM_MINMAX, CV_8U);
+
+	left_disp.convertTo(left_disp, CV_32F, 1/16.0);
+	right_disp.convertTo(right_disp, CV_32F, 1/16.0);
+	left_disp = left_disp / numDisparities;
+	right_disp = right_disp / numDisparities;
+
 
     wlsFilter->filter(left_disp, rectified_left, filteredDisparity, right_disp, Rect(), rectified_right);
-    cv::applyColorMap(filteredDisparity, coloredDisparity, cv::COLORMAP_JET);
+	// filteredDisparity.convertTo(filteredDisparity, CV_8UC1);
+    // cv::applyColorMap(filteredDisparity, coloredDisparity, cv::COLORMAP_JET);
 }
 
 
-void Stereo_Glasses::getDepthMap(Mat left, Mat right) {
-	left.copyTo(rectified_left);
-	right.copyTo(rectified_right);
-
-	Size kernel = Size(k, k);
-	GaussianBlur(left, left, kernel, 0);
-	GaussianBlur(right, right, kernel, 0);
-
-
+void Stereo_Glasses::tuneDepthMap(Mat left, Mat right) {
 	cv::namedWindow("Parameter Tuning", cv::WINDOW_NORMAL);
 
     cv::createTrackbar("BlockSize", "Parameter Tuning", &blockSize, 255, onTrackbar, this);
@@ -516,28 +514,34 @@ void Stereo_Glasses::getDepthMap(Mat left, Mat right) {
 		hconcat(left_disp, right_disp, disparity);
         cv::imshow("disparity", disparity);
         cv::imshow("filtered disparity", filteredDisparity);
-        cv::imshow("Colored Disparity", coloredDisparity);
+        // cv::imshow("Colored Disparity", coloredDisparity);
         cv::imshow("confidence map", wlsFilter->getConfidenceMap());
 
         int key = cv::waitKey(1);
         if (key == 27)  // Escape key to exit
             break;
     }
+}
 
 
-	// normalize(left_disp , left_disp, 0, 255, NORM_MINMAX, CV_8U);
-	// normalize(right_disp , right_disp, 0, 255, NORM_MINMAX, CV_8U);
+void Stereo_Glasses::getDepthMap(Mat left, Mat right) {
+    leftMatcher->compute(left, right, left_disp);
+    rightMatcher->compute(left, right, right_disp);
+
+	left_disp.convertTo(left_disp, CV_32F, 1/16.0);
+	right_disp.convertTo(right_disp, CV_32F, 1/16.0);
+	left_disp = left_disp / numDisparities;
+	right_disp = right_disp / numDisparities;
 
 
-	// wlsFilter->filter(left_disp, left ,filteredDisparity, right_disp, Rect(), right);
-	// hconcat(left_disp, right_disp, disparity);
-	// cv::applyColorMap(filteredDisparity, coloredDisparity, cv::COLORMAP_JET);
+    wlsFilter->filter(left_disp, left, filteredDisparity, right_disp, Rect(), right);
+    // cv::applyColorMap(filteredDisparity, coloredDisparity, cv::COLORMAP_JET);
 
-	// cv::imshow("disparity", disparity);
-	// cv::imshow("filtered disparity", filteredDisparity);
-	// // cv::imshow("Colored Disparity", coloredDisparity);
-	// cv::imshow("confidence map", wlsFilter->getConfidenceMap());
-    // // showPointCloud(pointcloud);
+	hconcat(left_disp, right_disp, disparity);
+	cv::imshow("disparity", disparity);
+	cv::imshow("filtered disparity", filteredDisparity);
+	// cv::imshow("Colored Disparity", coloredDisparity);
+	cv::imshow("confidence map", wlsFilter->getConfidenceMap());
 }
 
 
@@ -555,29 +559,27 @@ void Stereo_Glasses::getDepthMap(Mat left, Mat right) {
 
 
 
+void Stereo_Glasses::showPointCloud() {
+    //draw point cloud
+    //Generate point cloud
+    vector<Vector4d, Eigen::aligned_allocator<Vector4d>> pointcloud;
+    //If your machine is slow, please change the following v++ and u++ to v+=2, u+=2
+    for (int v = 0; v < filteredDisparity.rows; v++)
+        for (int u = 0; u < filteredDisparity.cols; u++) {
+            if (disparity.at<float>(v, u) <= 0.0 || disparity.at<float>(v, u) >= 96.0) continue;
 
+            Vector4d point(0, 0, 0, filteredDisparity.at<uchar>(v, u) / 255.0);//The first three dimensions are xyz, and the fourth dimension is color
 
-void Stereo_Glasses::showPointCloud(const vector<Vector4d, Eigen::aligned_allocator<Vector4d>> &pointcloud) {
-    // //draw point cloud
-    // //Generate point cloud
-    // vector<Vector4d, Eigen::aligned_allocator<Vector4d>> pointcloud;
-    // //If your machine is slow, please change the following v++ and u++ to v+=2, u+=2
-    // for (int v = 0; v < left.rows; v++)
-    //     for (int u = 0; u < left.cols; u++) {
-    //         if (disparity.at<float>(v, u) <= 0.0 || disparity.at<float>(v, u) >= 96.0) continue;
+            //Calculate the position of point based on the binocular model
+            double x = (u - cx) / fx;
+            double y = (v - cy) / fy;
+            double depth = fx * b / (disparity.at<float>(v, u));
+            point[0] = x * depth;
+            point[1] = y * depth;
+            point[2] = depth;
 
-    //         Vector4d point(0, 0, 0, left.at<uchar>(v, u) / 255.0);//The first three dimensions are xyz, and the fourth dimension is color
-
-    //         //Calculate the position of point based on the binocular model
-    //         double x = (u - cx) / fx;
-    //         double y = (v - cy) / fy;
-    //         double depth = fx * b / (disparity.at<float>(v, u));
-    //         point[0] = x * depth;
-    //         point[1] = y * depth;
-    //         point[2] = depth;
-
-    //         pointcloud.push_back(point);
-    //     }
+            pointcloud.push_back(point);
+        }
     if (pointcloud.empty()) {
         cerr << "Point cloud is empty!" << endl;
         return;

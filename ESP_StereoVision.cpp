@@ -16,7 +16,7 @@ int main(){
 	// glasses.calibrate();
 	// glasses.stereoCalibrate();
 	glasses.init();
-	// glasses.run();
+	glasses.run();
 	// glasses.runOne();
 
 

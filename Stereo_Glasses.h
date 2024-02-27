@@ -45,8 +45,9 @@ class Stereo_Glasses {
 		cv::Ptr<ximgproc::DisparityWLSFilter> wlsFilter = ximgproc::createDisparityWLSFilter(leftMatcher);
 
 		Stereo_Glasses(){
-			leftMatcher->setMinDisparity(minDisparity);
+			leftMatcher->setBlockSize(blockSize);
 			leftMatcher->setNumDisparities(numDisparities);
+			leftMatcher->setMinDisparity(minDisparity);
 			leftMatcher->setDisp12MaxDiff(1);
 			leftMatcher->setPreFilterCap(63);
 			leftMatcher->setUniquenessRatio(0);
@@ -54,9 +55,11 @@ class Stereo_Glasses {
 			leftMatcher->setSpeckleRange(32);
 
 
+
 			// rightMatcher = ximgproc::createRightMatcher(leftMatcher);
-			rightMatcher->setMinDisparity(minDisparity);
+			rightMatcher->setBlockSize(blockSize);
 			rightMatcher->setNumDisparities(numDisparities);
+			rightMatcher->setMinDisparity(minDisparity);
 			rightMatcher->setDisp12MaxDiff(1);
 			rightMatcher->setSpeckleWindowSize(9);
 			rightMatcher->setSpeckleRange(32);
@@ -68,15 +71,13 @@ class Stereo_Glasses {
 		}
 		void init();
 		int run();
-		int runOne();
-		void calibrate();
 		void stereoCalibrate();
-		void runWithDepth();
 
 		static void captureFrames(Stereo_Glasses *instance, VideoCapture& capture, Mat& frame, const string cam);
 		void getDepthMap(Mat left, Mat right);
+		void tuneDepthMap(Mat left, Mat right);
 		void updateDisparity();
-		void showPointCloud(const vector<Vector4d, Eigen::aligned_allocator<Vector4d>> &pointcloud);
+		void showPointCloud();
 };
 
 
