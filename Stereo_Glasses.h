@@ -10,6 +10,8 @@
 #include <pangolin/pangolin.h>
 #include <unistd.h>
 #include <thread>
+#include <AL/al.h>
+#include <AL/alc.h>
 
 using namespace std;
 using namespace Eigen;
@@ -20,8 +22,8 @@ class Stereo_Glasses {
 		// Defining the dimensions of checkerboard
 		int CHECKERBOARD[2]{8,5}; 
 		bool terminateThreads = false;
-		string LEFT_URL = "http://192.168.1.12";
-		string RIGHT_URL = "http://192.168.1.13";
+		string LEFT_URL = "http://192.168.1.11";
+		string RIGHT_URL = "http://192.168.1.8";
 		const string STREAM = ":81/stream";
 		const string CONTROL = "/control";
 		string savePath = "/home/mahmoud/code/WalkEasy/ESP_Stereo_OpenCV/data/";
@@ -31,16 +33,20 @@ class Stereo_Glasses {
 		Mat Right_Stereo_Map1, Right_Stereo_Map2;
 		double fx, fy, cx, cy, b;
 
+		// SGBM blockSize = 5, disparityFactor = 9, minDisparity = 0
+		// BM blockSize = 17, disparityFactor = 9, minDisparity = 0
 		int k = 17;
-		int blockSize = 9;
-		int P1 = 8*9*blockSize*blockSize; //*blockSize;
-		int P2 = 32*9*blockSize*blockSize; //*blockSize;
-		int minDisparity = 0;
+		int blockSize = 17;
+		int P1 = 8*blockSize*blockSize; //*blockSize;
+		int P2 = 32*blockSize*blockSize; //*blockSize;
+		int minFactor = 0;
+		int minDisparity = 16*minFactor;
 		int disparityFactor = 9;
 		int numDisparities = 16*disparityFactor - minDisparity;
 		Mat left_disp, right_disp, disparity, filteredDisparity, coloredDisparity;
 
 		Ptr<StereoBM> leftMatcher = StereoBM::create(numDisparities, blockSize);
+		// Ptr<StereoSGBM> leftMatcher = StereoSGBM::create(minDisparity, numDisparities, blockSize, P1, P2);
 		Ptr<StereoMatcher>rightMatcher = ximgproc::createRightMatcher(leftMatcher);
 		cv::Ptr<ximgproc::DisparityWLSFilter> wlsFilter = ximgproc::createDisparityWLSFilter(leftMatcher);
 
@@ -48,11 +54,11 @@ class Stereo_Glasses {
 			leftMatcher->setBlockSize(blockSize);
 			leftMatcher->setNumDisparities(numDisparities);
 			leftMatcher->setMinDisparity(minDisparity);
-			leftMatcher->setDisp12MaxDiff(1);
-			leftMatcher->setPreFilterCap(63);
-			leftMatcher->setUniquenessRatio(0);
-			leftMatcher->setSpeckleWindowSize(0);
-			leftMatcher->setSpeckleRange(32);
+			// leftMatcher->setDisp12MaxDiff(1);
+			// leftMatcher->setPreFilterCap(63);
+			// leftMatcher->setUniquenessRatio(0);
+			// leftMatcher->setSpeckleWindowSize(0);
+			// leftMatcher->setSpeckleRange(32);
 
 
 
@@ -60,9 +66,9 @@ class Stereo_Glasses {
 			rightMatcher->setBlockSize(blockSize);
 			rightMatcher->setNumDisparities(numDisparities);
 			rightMatcher->setMinDisparity(minDisparity);
-			rightMatcher->setDisp12MaxDiff(1);
-			rightMatcher->setSpeckleWindowSize(9);
-			rightMatcher->setSpeckleRange(32);
+			// rightMatcher->setDisp12MaxDiff(1);
+			// rightMatcher->setSpeckleWindowSize(9);
+			// rightMatcher->setSpeckleRange(32);
 		}
 
 		Stereo_Glasses(string LEFT_URL, string RIGHT_URL){
@@ -77,7 +83,7 @@ class Stereo_Glasses {
 		void getDepthMap(Mat left, Mat right);
 		void tuneDepthMap(Mat left, Mat right);
 		void updateDisparity();
-		void showPointCloud();
+		void showPointCloud(Mat disparity);
 };
 
 

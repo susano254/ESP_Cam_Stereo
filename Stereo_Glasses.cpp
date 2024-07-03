@@ -4,6 +4,99 @@ using namespace std;
 using namespace cv;
 
 
+float x = 20.0f;    // horizontal position right for positive and left for negative
+float y = 20.0f;    // vertical position up for positive and down for negative
+float z = 20.0f;    // depth position forward for positive and backward for negative
+
+// temp is just an example of one tone playing in a separate thread
+void* temp(void *arg){
+    ALuint sourceId = *(ALuint *) arg;
+    for(int i = 0; x > -20.0f; i++){
+        x -= 0.03f;
+        alSource3f(sourceId, AL_POSITION, x, 0, 0);
+        usleep(10000);
+    }
+    alSourceStop(sourceId);
+	cout << "Thread finished" << endl;
+    pthread_exit(NULL);
+}
+ALuint generateTone(float frequency) {
+    int seconds = 1;
+    int sampleRate = 44100;
+    size_t size = seconds * sampleRate * sizeof(int16_t);
+    int16_t* data = new int16_t[size];
+
+    float inc_freq = 0.0f;
+    for (int i = 0; i < size; i++) {
+        // size => 1/frequendcy
+        // size => wavelength
+        data[i] = (int16_t)(32767.0 * sin(2 * M_PI * frequency * i / sampleRate));
+
+//        //optional
+//        frequency += inc_freq;
+//        if(frequency < 100 || frequency > 5000)
+//            inc_freq = -inc_freq;
+    }
+
+    ALuint sourceId;
+    ALuint buffer;
+
+    //register the buffer with OpenAL
+    alGenBuffers(1, &buffer);
+    // fill the buffer with the audio data
+    alBufferData(buffer, AL_FORMAT_MONO16, data, size, sampleRate);
+
+    // set hte listener position
+    alListener3f(AL_POSITION, 0, 0, 0);
+    alListener3f(AL_VELOCITY, 0, 0, 0);
+
+    //register one source with OpenAL
+    alGenSources(1, &sourceId);
+    alSourcef(sourceId, AL_GAIN, 1);
+    alSourcef(sourceId, AL_PITCH, 1);
+
+    // attach the buffer to the source
+    alSourcei(sourceId, AL_BUFFER, buffer);
+    alSourcei(sourceId, AL_LOOPING, AL_TRUE);
+
+    return sourceId;
+}
+
+
+
+void playSound(ALuint sourceId) {
+    alSourcePlay(sourceId);
+
+    // execute this in separate thread
+    pthread_t thread;
+    pthread_create(&thread, NULL, temp, &sourceId);
+}
+
+void sound(){
+    // Initialize OpenAL context
+    ALCdevice *device = alcOpenDevice(NULL);
+    if (!device) {
+		// replace android log with cout
+		cout << "Failed to open default device" << endl;
+    }
+
+    ALCcontext *alContext = alcCreateContext(device, NULL);
+    alcMakeContextCurrent(alContext);
+    // Check for errors
+    ALenum error = alGetError();
+    if (error != AL_NO_ERROR) {
+		cout << "OpenAL error: " << error << endl;
+    }
+    else {
+		cout << "OpenAL initialized successfully" << endl;
+    }
+
+    ALuint sourceId = generateTone(4000);
+    playSound(sourceId);
+
+}
+
+
 void Stereo_Glasses::init(){
 	// Use the rotation matrixes for stereo rectification and camera intrinsics for undistorting the image
 	// Compute the rectification map (mapping between the original image pixels and 
@@ -54,68 +147,73 @@ void Stereo_Glasses::init(){
 	Mat rect_r = Mat (3, 3, CV_32FC1, rect_r_arr);
 	Mat proj_mat_l = Mat (3, 4, CV_32FC1, proj_mat_l_arr);
 	Mat proj_mat_r = Mat (3, 4, CV_32FC1, proj_mat_r_arr);
-	Mat grayL, grayR, rectFrameL, rectFrameR;
 
 
+	cv::initUndistortRectifyMap(new_mtxL, distL, rect_l, proj_mat_l, Size(640, 480), CV_16SC2, Left_Stereo_Map1, Left_Stereo_Map2);
+	cv::initUndistortRectifyMap(new_mtxR, distR, rect_r, proj_mat_r, Size(640, 480), CV_16SC2, Right_Stereo_Map1, Right_Stereo_Map2);
 
-	// frameL = imread(savePath + "New Folder/imageLeft.jpg");
-	Mat frameL = imread(savePath + "stereo/imageLeft70.jpg");
-	cvtColor(frameL,grayL,COLOR_BGR2GRAY);
-	// frameR = imread(savePath + "New Folder/imageRight.jpg");
-	Mat frameR = imread(savePath + "stereo/imageRight70.jpg");
-	cvtColor(frameR,grayR,COLOR_BGR2GRAY);
+	cout << "mtxl: " << new_mtxL << endl;
+	fx = new_mtxL.at<float>(0, 0);
+	fy = new_mtxL.at<float>(1, 1);
+	cx = new_mtxL.at<float>(0, 2);
+	cy = new_mtxL.at<float>(1, 2);
+	b = 10.29;
 
-	cv::initUndistortRectifyMap(new_mtxL, distL, rect_l, proj_mat_l, grayL.size(), CV_16SC2, Left_Stereo_Map1, Left_Stereo_Map2);
-	cv::initUndistortRectifyMap(new_mtxR, distR, rect_r, proj_mat_r, grayR.size(), CV_16SC2, Right_Stereo_Map1, Right_Stereo_Map2);
-	cv::remap(grayL, rectFrameL, Left_Stereo_Map1, Left_Stereo_Map2, INTER_LINEAR);
-	cv::remap(grayR, rectFrameR, Right_Stereo_Map1, Right_Stereo_Map2, INTER_LINEAR);
+	cout << "fx: " << fx << endl;
+
+	// Mat grayL, grayR, rectFrameL, rectFrameR;
+	// // frameL = imread(savePath + "New Folder/imageLeft.jpg");
+	// Mat frameL = imread(savePath + "stereo/imageLeft70.jpg");
+	// cvtColor(frameL,grayL,COLOR_BGR2GRAY);
+	// // frameR = imread(savePath + "New Folder/imageRight.jpg");
+	// Mat frameR = imread(savePath + "stereo/imageRight70.jpg");
+	// cvtColor(frameR,grayR,COLOR_BGR2GRAY);
+
+	// cv::remap(grayL, rectFrameL, Left_Stereo_Map1, Left_Stereo_Map2, INTER_LINEAR);
+	// cv::remap(grayR, rectFrameR, Right_Stereo_Map1, Right_Stereo_Map2, INTER_LINEAR);
 
 
-	Mat tempFrame1, tempFrame2;
+	// Mat tempFrame1, tempFrame2;
 
     // Draw the lines on the second image
-    cv::cvtColor(rectFrameL, rectFrameL, cv::COLOR_GRAY2BGR);
-    cv::cvtColor(rectFrameR, rectFrameR, cv::COLOR_GRAY2BGR);
+    // cv::cvtColor(rectFrameL, rectFrameL, cv::COLOR_GRAY2BGR);
+    // cv::cvtColor(rectFrameR, rectFrameR, cv::COLOR_GRAY2BGR);
 
-	hconcat(frameL, frameR, tempFrame1);
-	imshow("Left and Right", tempFrame1);
-	hconcat(rectFrameL, rectFrameR, tempFrame2);
-	imshow("Rectified Frames", tempFrame2);
-	waitKey(0);
-
-
-	// Draw horizontal lines on the concatenated image
-    int numLines = 30;  // Adjust the number of lines as needed
-    int lineHeight = tempFrame1.rows / (numLines + 1);  // Evenly distribute lines
-	vector<Scalar> colors = {Scalar(0, 255, 0), Scalar(255, 0, 0), Scalar(0, 0, 255)};
-    for (int i = 1; i <= numLines; ++i) {
-        int y = i * lineHeight;
-        cv::line(tempFrame1, cv::Point(0, y), cv::Point(tempFrame1.cols, y), colors[i%3], 1);
-        cv::line(tempFrame2, cv::Point(0, y), cv::Point(tempFrame2.cols, y), colors[i%3], 1);
-    }
-
-    // Display the concatenated image with horizontal lines
-	cv::imshow("Left and Right with Lines", tempFrame1);
-    cv::imshow("Rectified Frames with Lines", tempFrame2);
-    cv::waitKey(0);
+	// hconcat(frameL, frameR, tempFrame1);
+	// imshow("Left and Right", tempFrame1);
+	// hconcat(rectFrameL, rectFrameR, tempFrame2);
+	// imshow("Rectified Frames", tempFrame2);
+	// waitKey(0);
 
 
-	double fx = new_mtxL.at<double>(0, 0);
-	double fy = new_mtxL.at<double>(1, 1);
-	double cx = new_mtxL.at<double>(0, 2);
-	double cy = new_mtxL.at<double>(1, 2);
-	double b = 10.29;
+	// // Draw horizontal lines on the concatenated image
+    // int numLines = 30;  // Adjust the number of lines as needed
+    // int lineHeight = tempFrame1.rows / (numLines + 1);  // Evenly distribute lines
+	// vector<Scalar> colors = {Scalar(0, 255, 0), Scalar(255, 0, 0), Scalar(0, 0, 255)};
+    // for (int i = 1; i <= numLines; ++i) {
+    //     int y = i * lineHeight;
+    //     cv::line(tempFrame1, cv::Point(0, y), cv::Point(tempFrame1.cols, y), colors[i%3], 1);
+    //     cv::line(tempFrame2, cv::Point(0, y), cv::Point(tempFrame2.cols, y), colors[i%3], 1);
+    // }
+
+    // // Display the concatenated image with horizontal lines
+	// cv::imshow("Left and Right with Lines", tempFrame1);
+    // cv::imshow("Rectified Frames with Lines", tempFrame2);
+    // cv::waitKey(0);
 
 
-    cv::cvtColor(rectFrameL, rectFrameL, cv::COLOR_BGR2GRAY);
-    cv::cvtColor(rectFrameR, rectFrameR, cv::COLOR_BGR2GRAY);
-	destroyAllWindows();
 
-	rectFrameL.copyTo(rectified_left);
-	rectFrameR.copyTo(rectified_right);
+
+    // cv::cvtColor(rectFrameL, rectFrameL, cv::COLOR_BGR2GRAY);
+    // cv::cvtColor(rectFrameR, rectFrameR, cv::COLOR_BGR2GRAY);
+	// destroyAllWindows();
+
+	// rectFrameL.copyTo(rectified_left);
+	// rectFrameR.copyTo(rectified_right);
 
 	// tuneDepthMap(rectified_left, rectified_right);
 	// waitKey(0);
+	// sound();
 }
 
 
@@ -144,13 +242,12 @@ int Stereo_Glasses::run(){
 	Mat gridFrame;
 	int i = 0;
 	while(true){
-
 		if(!frameLeft.empty() && !frameRight.empty()){
 			cvtColor(frameLeft,grayL,COLOR_BGR2GRAY);
 			cvtColor(frameRight,grayR,COLOR_BGR2GRAY);
 
 			hconcat(frameLeft, frameRight, frame);
-			frame.copyTo(gridFrame);
+			// frame.copyTo(gridFrame);
 			// // Draw horizontal lines on the concatenated image
 			// int numLines = 30;  // Adjust the number of lines as needed
 			// int lineHeight = gridFrame.rows / (numLines + 1);  // Evenly distribute lines
@@ -159,12 +256,13 @@ int Stereo_Glasses::run(){
 			// 	int y = j * lineHeight;
 			// 	cv::line(gridFrame, cv::Point(0, y), cv::Point(gridFrame.cols, y), colors[j%3], 1);
 			// }
-			imshow("Stereo Stream", frame);
+			// imshow("Stereo Stream", frame);
 			// imshow("Stereo Stream with Lines", gridFrame);
 
 			cv::remap(grayL, rectFrameL, Left_Stereo_Map1, Left_Stereo_Map2, INTER_LINEAR);
 			cv::remap(grayR, rectFrameR, Right_Stereo_Map1, Right_Stereo_Map2, INTER_LINEAR);
 			getDepthMap(rectFrameL, rectFrameR);
+			// showPointCloud(left_disp);
 		}
 
 
@@ -485,8 +583,8 @@ void Stereo_Glasses::updateDisparity() {
     rightMatcher->compute(rectified_left, rectified_right, right_disp);
     // rightMatcher->compute(rectified_right, rectified_left, right_disp);
 
-    wlsFilter->setLambda(5000.0);
-    wlsFilter->setSigmaColor(1.5);
+    wlsFilter->setLambda(0.0);
+    wlsFilter->setSigmaColor(1.0);
 
 
 	left_disp.convertTo(left_disp, CV_32F, 1/16.0);
@@ -496,8 +594,6 @@ void Stereo_Glasses::updateDisparity() {
 
 
     wlsFilter->filter(left_disp, rectified_left, filteredDisparity, right_disp, Rect(), rectified_right);
-	// filteredDisparity.convertTo(filteredDisparity, CV_8UC1);
-    // cv::applyColorMap(filteredDisparity, coloredDisparity, cv::COLORMAP_JET);
 }
 
 
@@ -528,20 +624,133 @@ void Stereo_Glasses::getDepthMap(Mat left, Mat right) {
     leftMatcher->compute(left, right, left_disp);
     rightMatcher->compute(left, right, right_disp);
 
-	left_disp.convertTo(left_disp, CV_32F, 1/16.0);
-	right_disp.convertTo(right_disp, CV_32F, 1/16.0);
-	left_disp = left_disp / numDisparities;
-	right_disp = right_disp / numDisparities;
 
 
-    wlsFilter->filter(left_disp, left, filteredDisparity, right_disp, Rect(), right);
-    // cv::applyColorMap(filteredDisparity, coloredDisparity, cv::COLORMAP_JET);
+	// left_disp = left_disp / numDisparities;
+	// right_disp = right_disp / numDisparities;
+	left_disp.convertTo(left_disp, CV_32F, 1.0 / 16.0);
+	right_disp.convertTo(right_disp, CV_32F, 1.0 /16.0);
+
+	wlsFilter->setLambda(10000.0);
+	wlsFilter->setSigmaColor(0.8);
+
+    wlsFilter->filter(left_disp/(numDisparities-minDisparity), left, filteredDisparity, right_disp/(numDisparities-minDisparity), Rect(), right);
+    int cropWidth = numDisparities;
+    cv::Rect roi(cropWidth, 0, filteredDisparity.cols - cropWidth, filteredDisparity.rows);
+	filteredDisparity = filteredDisparity(roi);
+
+	//get middle pixel disparity
+	int u = left_disp.rows / 2;
+	int v = left_disp.cols / 2;
+	float disparityVal = filteredDisparity.at<float>(u, v);
+	disparityVal = disparityVal * 16.0;
+	disparityVal = disparityVal * (numDisparities-minDisparity);
+
+	// if(disparityVal > 0 && disparityVal < (numDisparities-minDisparity)){
+		cout << "Disparity: " << disparityVal << endl;
+		cout << "fx: " << fx << " b: " << b << " Depth: " << (fx * b) / disparityVal << endl;
+
+	// }
 
 	hconcat(left_disp, right_disp, disparity);
-	cv::imshow("disparity", disparity);
+	cv::imshow("disparity", disparity/(numDisparities-minDisparity));
+
+
+	// draw a point in the middle of the filtered disparity map
+	cv::circle(filteredDisparity, cv::Point(filteredDisparity.cols / 2, filteredDisparity.rows / 2), 5, cv::Scalar(0, 0, 0), -1);
 	cv::imshow("filtered disparity", filteredDisparity);
-	// cv::imshow("Colored Disparity", coloredDisparity);
-	cv::imshow("confidence map", wlsFilter->getConfidenceMap());
+	filteredDisparity.convertTo(coloredDisparity, CV_8UC1, 255.0);
+	// Mat finalDisparity;
+	// normalize(filteredDisparity, finalDisparity, 0, 255, cv::NORM_MINMAX, CV_8UC1);
+	// cv::imshow("Final Disparity", finalDisparity);
+
+    cv::applyColorMap(coloredDisparity, coloredDisparity, cv::COLORMAP_JET);
+	cv::imshow("Colored Disparity", coloredDisparity);
+	// hconcat(filteredDisparity, coloredDisparity, finalDisparity);
+	// cv::imshow("Final Disparity", finalDisparity);
+	// cv::imshow("confidence map", wlsFilter->getConfidenceMap());
+
+
+
+	// cv::imshow("Segmented Disparity", segmentedDisparity);
+	//laplace edge detection
+	Mat segmentedDisparity;
+	left.copyTo(segmentedDisparity);
+	segmentedDisparity.convertTo(segmentedDisparity, CV_8UC1, 255.0);
+
+	// // calculate histogram of the image
+	// cv::Mat hist;
+	// int histSize = 256;
+	// float range[] = {0, 256};
+	// const float* histRange = {range};
+	// cv::calcHist(&segmentedDisparity, 1, 0, cv::Mat(), hist, 1, &histSize, &histRange, true, false);
+
+	// //display histogram
+	// int hist_w = 512;
+	// int hist_h = 400;
+
+	// int bin_w = cvRound((double) hist_w / histSize);
+
+	// cv::Mat histImage(hist_h, hist_w, CV_8UC1, cv::Scalar(255, 255, 255));
+
+	// //normalize the histogram
+	// cv::normalize(hist, hist, 0, histImage.rows, cv::NORM_MINMAX, -1, cv::Mat());
+
+	// //draw the histogram
+	// for (int i = 1; i < histSize; i++) {
+	// 	cv::line(histImage, cv::Point(bin_w * (i - 1), hist_h - cvRound(hist.at<float>(i - 1))),
+	// 			 cv::Point(bin_w * (i), hist_h - cvRound(hist.at<float>(i))),
+	// 			 cv::Scalar(0, 0, 0), 2, 8, 0);
+	// }
+
+	// cv::imshow("Histogram", histImage);
+
+
+	// // gausian blur
+	// cv::GaussianBlur(segmentedDisparity, segmentedDisparity, cv::Size(9, 9), 0, 0, cv::BORDER_DEFAULT);
+	// bilateral filter
+	Mat smoothedDisparity;
+	cv::bilateralFilter(left, smoothedDisparity, 9, 75, 75, cv::BORDER_DEFAULT);
+	// cv::GaussianBlur(left, smoothedDisparity, cv::Size(11, 9), 0, 0, cv::BORDER_DEFAULT);
+
+
+	// // threshold from mean to 255
+	// // cv::threshold(segmentedDisparity, segmentedDisparity, 100, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
+	Mat edges;
+	cv::Laplacian(smoothedDisparity, edges, CV_8UC1, 5, 1, 0, cv::BORDER_DEFAULT);
+	// cv:Canny(smoothedDisparity, edges, 100, 200, 5);
+
+	cv::imshow("left", left);
+	cv::imshow("Edges", edges);
+
+
+
+	cv::morphologyEx(edges, edges, cv::MORPH_OPEN, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3)), cv::Point(-1, -1), 2);
+	cv::imshow("morphed", edges);
+
+
+
+
+	// std::vector<std::vector<cv::Point>> contours;
+	// cv::findContours(segmentedDisparity, contours, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE);
+	
+	// cv::Mat contourImage = cv::Mat::zeros(segmentedDisparity.size(), CV_8UC3);
+
+	// for (size_t i = 0; i < contours.size(); i++) {
+	// 	cv::drawContours(contourImage, contours, i, cv::Scalar(255, 255, 255), 1);
+	// }
+
+	// cv::imshow("Segmented Disparity Contours", contourImage);
+
+	// // show bouding rectangles
+	// cv::Mat boundingRectImage = cv::Mat::zeros(segmentedDisparity.size(), CV_8UC3);
+
+	// for (size_t i = 0; i < contours.size(); i++) {
+	// 	cv::Rect rect = cv::boundingRect(contours[i]);
+	// 	cv::rectangle(boundingRectImage, rect, cv::Scalar(255, 255, 255), 1);
+	// }
+
+	// cv::imshow("Segmented Disparity Bounding Rectangles", boundingRectImage);
 }
 
 
@@ -559,16 +768,16 @@ void Stereo_Glasses::getDepthMap(Mat left, Mat right) {
 
 
 
-void Stereo_Glasses::showPointCloud() {
+void Stereo_Glasses::showPointCloud(Mat disparity) {
     //draw point cloud
     //Generate point cloud
     vector<Vector4d, Eigen::aligned_allocator<Vector4d>> pointcloud;
     //If your machine is slow, please change the following v++ and u++ to v+=2, u+=2
-    for (int v = 0; v < filteredDisparity.rows; v++)
-        for (int u = 0; u < filteredDisparity.cols; u++) {
-            if (disparity.at<float>(v, u) <= 0.0 || disparity.at<float>(v, u) >= 96.0) continue;
+    for (int v = 0; v < disparity.rows; v++)
+        for (int u = 0; u < disparity.cols; u++) {
+            if (disparity.at<float>(v, u) <= minDisparity || disparity.at<float>(v, u) >= numDisparities+minDisparity) continue;
 
-            Vector4d point(0, 0, 0, filteredDisparity.at<uchar>(v, u) / 255.0);//The first three dimensions are xyz, and the fourth dimension is color
+            Vector4d point(0, 0, 0, disparity.at<uchar>(v, u) / 255.0);//The first three dimensions are xyz, and the fourth dimension is color
 
             //Calculate the position of point based on the binocular model
             double x = (u - cx) / fx;
